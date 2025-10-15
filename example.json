@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gomcp-scaffold": {
+      "command": "go",
+      "args": ["run", ".", "runserver", "--port", "8080"],
+      "cwd": "/path/to/your/gomcp"
+    }
+  }
+}
