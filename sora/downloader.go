@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -38,6 +40,31 @@ func NewMediaDownloader(savePath string) *MediaDownloader {
 // DownloadMedia 下载媒体文件
 // 返回本地文件路径
 func (d *MediaDownloader) DownloadMedia(mediaURL string, mediaType MediaType) (string, error) {
+	// 生成文件夹和文件路径（优先使用task ID）
+	folderName := d.generateFolderName(mediaURL)
+	folderPath := filepath.Join(d.savePath, folderName)
+
+	// 确保文件夹存在
+	if err := os.MkdirAll(folderPath, 0755); err != nil {
+		return "", errors.Wrap(err, "failed to create folder")
+	}
+
+	// 根据媒体类型确定文件名
+	var fileName string
+	if mediaType == MediaTypeVideo {
+		fileName = "video.mp4"
+	} else {
+		fileName = "thumbnail.webp"
+	}
+
+	filePath := filepath.Join(folderPath, fileName)
+
+	// 去重：如果文件已存在，直接返回路径
+	if _, err := os.Stat(filePath); err == nil {
+		logrus.Infof("File already exists, skipping download: %s", filePath)
+		return filePath, nil
+	}
+
 	logrus.Debugf("Downloading %s: %s", mediaType, mediaURL)
 
 	// 下载媒体数据
@@ -55,16 +82,6 @@ func (d *MediaDownloader) DownloadMedia(mediaURL string, mediaType MediaType) (s
 	mediaData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read media data")
-	}
-
-	// 生成唯一文件名
-	fileName := d.generateFileName(mediaURL, mediaType)
-	filePath := filepath.Join(d.savePath, fileName)
-
-	// 如果文件已存在，直接返回路径
-	if _, err := os.Stat(filePath); err == nil {
-		logrus.Debugf("File already exists: %s", filePath)
-		return filePath, nil
 	}
 
 	// 保存到文件
@@ -99,31 +116,39 @@ func (d *MediaDownloader) DownloadMediaBatch(urls []string, mediaType MediaType)
 	return localPaths, nil
 }
 
-// generateFileName 生成唯一的文件名
-func (d *MediaDownloader) generateFileName(mediaURL string, mediaType MediaType) string {
-	// 使用URL的SHA256哈希作为文件名，确保唯一性
+// extractTaskID 从URL中提取task ID
+func extractTaskID(mediaURL string) (string, bool) {
+	// URL解码
+	decoded, err := url.QueryUnescape(mediaURL)
+	if err != nil {
+		decoded = mediaURL // 如果解码失败，使用原始URL
+	}
+
+	// 匹配 task_[a-z0-9]{26} 模式
+	re := regexp.MustCompile(`task_[a-z0-9]{26}`)
+	matches := re.FindString(decoded)
+
+	if matches != "" {
+		return matches, true
+	}
+	return "", false
+}
+
+// generateFolderName 生成文件夹名（优先使用task ID，否则使用URL哈希）
+func (d *MediaDownloader) generateFolderName(mediaURL string) string {
+	// 优先尝试提取task ID
+	if taskID, ok := extractTaskID(mediaURL); ok {
+		logrus.Debugf("Extracted task ID: %s from URL", taskID)
+		return taskID
+	}
+
+	// 回退方案：使用URL的SHA256哈希
+	logrus.Warnf("Could not extract task ID from URL, using hash fallback")
 	hash := sha256.Sum256([]byte(mediaURL))
 	hashStr := fmt.Sprintf("%x", hash)
 
-	// 取前12位哈希值作为文件名
-	shortHash := hashStr[:12]
-
-	// 添加时间戳确保更好的唯一性
-	timestamp := time.Now().Unix()
-
-	// 根据媒体类型确定扩展名
-	var extension string
-	var prefix string
-
-	if mediaType == MediaTypeVideo {
-		extension = "mp4"
-		prefix = "sora_video"
-	} else {
-		extension = "webp"
-		prefix = "sora_thumb"
-	}
-
-	return fmt.Sprintf("%s_%d_%s.%s", prefix, timestamp, shortHash, extension)
+	// 取前12位哈希值作为文件夹名
+	return hashStr[:12]
 }
 
 // IsVideoURL 判断 URL 是否为视频

@@ -11,6 +11,7 @@ A Go-based service for crawling Sora videos from sora.chatgpt.com with REST API 
 - 🌐 **CORS and middleware support** out of the box
 - 📝 **MCP Integration** - Optional MCP tools for AI agent integration
 - 🔒 **Anti-Detection** - Built-in stealth mode to bypass Cloudflare and other anti-bot protections
+- ♻️ **Smart Deduplication** - Automatically skips re-downloading existing videos/thumbnails, organized in unique folders
 
 ## Quick Start
 
@@ -113,6 +114,40 @@ Crawls Sora videos and thumbnails from sora.chatgpt.com.
 ### GET /health
 
 Health check endpoint.
+
+## Deduplication System
+
+The crawler includes smart deduplication to prevent re-downloading the same videos and thumbnails:
+
+### Features
+
+- **URL-Based Hashing** - Each URL is hashed (SHA256) to create a unique folder identifier
+- **Automatic Skip** - Files are checked before download; existing files are skipped
+- **Organized Structure** - Each video/thumbnail pair stored in its own folder
+- **Bandwidth Savings** - Only download new content on subsequent crawls
+
+### File Structure
+
+```
+downloads/sora/
+├── 8bfb1a7bdd74/           # Hash from video URL
+│   ├── video.mp4           # Video file
+│   └── thumbnail.webp      # Thumbnail file
+├── 3892fb6b23d4/
+│   ├── video.mp4
+│   └── thumbnail.webp
+└── debug_initial_page.png
+```
+
+### Testing Deduplication
+
+Run the deduplication test script:
+
+```bash
+./test_deduplication.sh
+```
+
+For more details, see [DEDUPLICATION.md](DEDUPLICATION.md).
 
 ## Anti-Detection & Cloudflare Bypass
 
