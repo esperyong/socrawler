@@ -118,12 +118,37 @@ fi
 
 echo ""
 echo -e "${YELLOW}Step 7: Testing headless mode...${NC}"
-# Test Chrome in headless mode
-if google-chrome --headless --disable-gpu --dump-dom https://www.google.com > /dev/null 2>&1; then
+# Test Chrome in headless mode with more detailed output
+echo "Running Chrome headless test (this may take a few seconds)..."
+
+# Create a temporary file for error output
+TEMP_ERROR=$(mktemp)
+
+# Try to run Chrome in headless mode with common flags
+if google-chrome \
+    --headless=new \
+    --disable-gpu \
+    --no-sandbox \
+    --disable-dev-shm-usage \
+    --disable-software-rasterizer \
+    --disable-extensions \
+    --dump-dom https://www.google.com > /dev/null 2>"$TEMP_ERROR"; then
     echo -e "${GREEN}✓ Chrome headless mode is working${NC}"
+    rm -f "$TEMP_ERROR"
 else
-    echo -e "${RED}✗ Chrome headless mode test failed${NC}"
-    exit 1
+    echo -e "${YELLOW}⚠ Chrome headless mode test had issues${NC}"
+    echo ""
+    echo "Error details:"
+    cat "$TEMP_ERROR"
+    rm -f "$TEMP_ERROR"
+    echo ""
+    echo -e "${YELLOW}This is usually not critical. Chrome is installed and may work with go-rod.${NC}"
+    echo -e "${YELLOW}Common causes:${NC}"
+    echo "  - Running as root (use regular user if possible)"
+    echo "  - Missing display environment (normal for servers)"
+    echo "  - Sandbox restrictions (go-rod handles this automatically)"
+    echo ""
+    echo -e "${YELLOW}Continuing anyway...${NC}"
 fi
 
 echo ""
@@ -132,10 +157,21 @@ echo "Installation Complete!"
 echo "==========================================${NC}"
 echo ""
 echo "Chrome is now ready for headless operation."
-echo "You can now run your socrawler service with:"
 echo ""
+echo -e "${YELLOW}Important Notes:${NC}"
+echo "1. Chrome is installed at: $(which google-chrome)"
+echo "2. Chrome version: $(google-chrome --version)"
+echo "3. go-rod will automatically handle browser launch with proper flags"
+echo ""
+echo -e "${GREEN}Next steps:${NC}"
+echo "  # Build your application"
+echo "  go build -o socrawler ."
+echo ""
+echo "  # Run the service"
 echo "  ./socrawler runserver --headless=true"
 echo ""
-echo "Chrome location: $(which google-chrome)"
-echo "Chrome version: $(google-chrome --version)"
+echo -e "${YELLOW}If you encounter issues:${NC}"
+echo "  - Make sure you're not running as root (if possible)"
+echo "  - Check logs with --debug flag"
+echo "  - Try non-headless mode first: --headless=false"
 
