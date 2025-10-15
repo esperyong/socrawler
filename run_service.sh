@@ -346,12 +346,49 @@ cleanup() {
     print_success "Cleanup completed"
 }
 
+# Function to build the service
+build_service() {
+    print_info "Building ${SERVICE_NAME} service..."
+    
+    # Check if go is installed
+    if ! command -v go &> /dev/null; then
+        print_error "Go is not installed or not in PATH"
+        print_info "Please install Go from https://golang.org/dl/"
+        exit 1
+    fi
+    
+    # Display Go version
+    local go_version=$(go version)
+    print_info "Using: $go_version"
+    
+    # Build the binary
+    print_info "Running: go build -o $SERVICE_BIN ."
+    
+    if go build -o "$SERVICE_BIN" .; then
+        print_success "Build completed successfully!"
+        print_info "Binary: $SERVICE_BIN"
+        
+        # Make it executable
+        chmod +x "$SERVICE_BIN"
+        
+        # Show binary info
+        if [ -f "$SERVICE_BIN" ]; then
+            local size=$(ls -lh "$SERVICE_BIN" | awk '{print $5}')
+            print_info "Binary size: $size"
+        fi
+    else
+        print_error "Build failed!"
+        return 1
+    fi
+}
+
 # Function to show usage
 show_usage() {
     cat << EOF
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
+    build       Build the service binary
     start       Start the service
     stop        Stop the service
     restart     Restart the service
@@ -369,6 +406,9 @@ Options:
     --interval=<seconds>        Test scroll interval (default: 10)
 
 Examples:
+    # Build the service binary
+    $0 build
+
     # Start the service
     $0 start
 
@@ -431,6 +471,9 @@ done
 
 # Execute command
 case "$COMMAND" in
+    build)
+        build_service
+        ;;
     start)
         start_service
         ;;
