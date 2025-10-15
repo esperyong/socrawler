@@ -47,15 +47,8 @@ func NewCleanBrowser(headless bool) *StealthBrowser {
 	// 创建 rod 浏览器实例
 	rodBrowser := rod.New().ControlURL(url).MustConnect()
 
-	// 使用 headless_browser 包装
-	userAgent := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-	hb := headless_browser.New(
-		headless_browser.WithHeadless(headless),
-		headless_browser.WithUserAgent(userAgent),
-	)
-
 	return &StealthBrowser{
-		Browser:    hb,
+		Browser:    nil, // 不再使用 headless_browser 包装，直接使用 rod
 		rodBrowser: rodBrowser,
 	}
 }
@@ -151,9 +144,6 @@ func (sb *StealthBrowser) NewPage() *rod.Page {
 func (sb *StealthBrowser) Close() {
 	if sb.rodBrowser != nil {
 		sb.rodBrowser.MustClose()
-	}
-	if sb.Browser != nil {
-		sb.Browser.Close()
 	}
 }
 
