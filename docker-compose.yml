@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  socrawler:
+    build: .
+    container_name: socrawler
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount downloads directory to persist downloaded videos
+      - ./downloads:/app/downloads
+    environment:
+      - CHROME_BIN=/usr/bin/google-chrome
+      - DISPLAY=:99
+    restart: unless-stopped
+    # Increase shared memory size for Chrome
+    shm_size: 2gb
+    # Security options for Chrome sandbox
+    security_opt:
+      - seccomp:unconfined
+    # Optional: limit resources
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+

@@ -264,6 +264,20 @@ go build -o socrawler .
 - Chrome/Chromium browser (automatically managed by go-rod)
 - Internet connection (for accessing sora.chatgpt.com)
 
+### For Ubuntu Server Deployment
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed instructions on:
+- Installing Chrome on Ubuntu servers
+- Docker deployment
+- Systemd service setup
+- Production configurations
+
+**Quick Ubuntu Setup:**
+```bash
+# Run the automated setup script
+./setup_browser_ubuntu.sh
+```
+
 ## Troubleshooting
 
 ### Browser not launching

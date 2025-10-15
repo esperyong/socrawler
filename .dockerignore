@@ -1,0 +1,45 @@
+# Ignore files for Docker build
+
+# Binaries
+socrawler
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test and temporary files
+*.test
+*.out
+*.log
+
+# Downloaded content
+downloads/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+
+# CI/CD
+.github/
+
+# Local development
+test_sora_crawl.sh
+setup_browser_ubuntu.sh
+
+# MacOS
+.DS_Store
+
+# Other projects
+xiaohongshu-mcp/
+
