@@ -25,15 +25,21 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 	router.Any("/mcp", gin.WrapH(mcpHandler))
 	router.Any("/mcp/*path", gin.WrapH(mcpHandler))
 
+	// API endpoints
+	api := router.Group("/api")
+	{
+		// Sora crawler endpoint
+		api.POST("/sora/crawl", appServer.crawlSoraHandler)
+	}
+
 	return router
 }
 
 // healthHandler handles health check requests
 func healthHandler(c *gin.Context) {
-	respondSuccess(c, map[string]any{
-		"status":    "healthy",
-		"service":   "gomcp-scaffold",
-		"version":   "1.0.0",
-		"timestamp": "now",
-	}, "Service is healthy")
+	c.JSON(200, map[string]any{
+		"status":  "healthy",
+		"service": "socrawler",
+		"version": "1.0.0",
+	})
 }

@@ -60,3 +60,21 @@ type MCPContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
 }
+
+// Sora Crawler Types
+
+// SoraCrawlRequest represents a request to crawl Sora videos
+type SoraCrawlRequest struct {
+	TotalDurationSeconds  int    `json:"total_duration_seconds"`  // Total duration in seconds (default: 300)
+	ScrollIntervalSeconds int    `json:"scroll_interval_seconds"` // Scroll interval in seconds (default: 20)
+	SavePath              string `json:"save_path"`               // Save path (default: ./downloads/sora)
+}
+
+// SoraCrawlResponse represents the response from crawling Sora videos
+type SoraCrawlResponse struct {
+	Videos          []string `json:"videos"`           // List of downloaded video paths
+	Thumbnails      []string `json:"thumbnails"`       // List of downloaded thumbnail paths
+	TotalVideos     int      `json:"total_videos"`     // Total number of videos downloaded
+	TotalThumbnails int      `json:"total_thumbnails"` // Total number of thumbnails downloaded
+	DurationSeconds int      `json:"duration_seconds"` // Actual duration in seconds
+}

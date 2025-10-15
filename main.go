@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/esperyong/socrawler/configs"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -13,9 +14,9 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:     "gomcp",
-		Short:   "A Go-based MCP (Model Context Protocol) server scaffold",
-		Long:    `A scaffold for building MCP servers in Go with built-in HTTP and JSON-RPC support.`,
+		Use:     "socrawler",
+		Short:   "A Sora video crawler with MCP support",
+		Long:    `A service for crawling Sora videos with REST API and MCP (Model Context Protocol) support.`,
 		Version: version,
 	}
 
@@ -32,17 +33,22 @@ func main() {
 func newRunServerCmd() *cobra.Command {
 	var port string
 	var debug bool
+	var headless bool
 
 	cmd := &cobra.Command{
 		Use:   "runserver",
-		Short: "Start the MCP server",
-		Long:  `Start the MCP server with HTTP and JSON-RPC support`,
+		Short: "Start the server",
+		Long:  `Start the server with HTTP API and MCP support`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if debug {
 				logrus.SetLevel(logrus.DebugLevel)
 			}
 
-			logrus.Infof("Starting MCP server on port %s", port)
+			// Initialize headless mode
+			configs.InitHeadless(headless)
+			logrus.Infof("Browser headless mode: %v", headless)
+
+			logrus.Infof("Starting server on port %s", port)
 
 			// Create and start the server
 			server := NewAppServer()
@@ -54,6 +60,7 @@ func newRunServerCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&port, "port", "p", "8080", "Port to run the server on")
 	cmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
+	cmd.Flags().BoolVar(&headless, "headless", true, "Run browser in headless mode")
 
 	return cmd
 }

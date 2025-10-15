@@ -38,3 +38,5 @@ gomcp-test
 gomcp-server
 dist/
 build/
+downloads/
+socrawler
