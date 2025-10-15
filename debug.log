@@ -1,0 +1,4 @@
+time="2025-10-15T15:18:23+08:00" level=info msg="Browser headless mode: true"
+time="2025-10-15T15:18:23+08:00" level=info msg="Starting server on port 8080"
+time="2025-10-15T15:18:23+08:00" level=info msg="Starting HTTP server on :8080"
+time="2025-10-15T15:18:23+08:00" level=error msg="Server startup failed: listen tcp :8080: bind: address already in use"

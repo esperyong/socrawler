@@ -10,6 +10,7 @@ A Go-based service for crawling Sora videos from sora.chatgpt.com with REST API 
 - 🛠️ **Browser Automation** - Uses headless Chrome for dynamic content scraping
 - 🌐 **CORS and middleware support** out of the box
 - 📝 **MCP Integration** - Optional MCP tools for AI agent integration
+- 🔒 **Anti-Detection** - Built-in stealth mode to bypass Cloudflare and other anti-bot protections
 
 ## Quick Start
 
@@ -113,6 +114,71 @@ Crawls Sora videos and thumbnails from sora.chatgpt.com.
 
 Health check endpoint.
 
+## Anti-Detection & Cloudflare Bypass
+
+The crawler includes built-in anti-detection features to bypass Cloudflare and other anti-bot protections:
+
+### Features
+
+1. **Stealth Mode** - Uses `go-rod/stealth` library to hide automation signatures
+2. **Custom User Agent** - Mimics real Chrome browser on macOS
+3. **JavaScript Overrides** - Masks `navigator.webdriver` and other detection points
+4. **Realistic Browser Behavior** - Smooth scrolling and natural timing
+
+### How It Works
+
+The crawler automatically applies stealth techniques:
+
+```go
+// In browser/browser.go
+- Sets realistic User-Agent
+- Injects stealth.js to hide automation
+- Overrides navigator.webdriver
+- Masks Chrome automation flags
+- Simulates real browser properties
+```
+
+### Testing Anti-Detection
+
+To verify the anti-detection is working:
+
+1. Run with visible browser (non-headless mode):
+```bash
+go run . runserver --headless=false --debug
+```
+
+2. Watch the browser navigate to Sora - it should pass Cloudflare verification automatically
+
+3. Check logs for:
+```
+level=info msg="Applying stealth mode to page..."
+level=info msg="Page loaded, waiting for initial content..."
+```
+
+### If Cloudflare Still Blocks
+
+If you still see Cloudflare verification pages:
+
+1. **Try non-headless mode first** - Some sites detect headless browsers:
+```bash
+go run . runserver --headless=false
+```
+
+2. **Add delays** - Increase wait times to appear more human:
+```bash
+curl -X POST http://localhost:8080/api/sora/crawl \
+  -H "Content-Type: application/json" \
+  -d '{
+    "total_duration_seconds": 120,
+    "scroll_interval_seconds": 15,
+    "save_path": "./downloads/sora"
+  }'
+```
+
+3. **Check your IP** - Some IPs may be rate-limited or blocked by Cloudflare
+
+4. **Use residential proxy** - For production use, consider using a proxy service
+
 ## Debugging & Troubleshooting
 
 ### Enhanced Logging
@@ -128,6 +194,7 @@ The crawler now includes detailed logging to help diagnose issues:
 ### Example Debug Output
 
 ```
+time="..." level=info msg="Applying stealth mode to page..."
 time="..." level=info msg="Page title: Sora, URL: https://sora.chatgpt.com/"
 time="..." level=info msg="Saved initial page screenshot to: ./downloads/sora/debug_initial_page.png"
 time="..." level=debug msg="Page HTML length: 45678 bytes"
@@ -137,6 +204,14 @@ time="..." level=info msg="Current status: videos=5, thumbnails=5, total_request
 ```
 
 ### Common Issues
+
+**Cloudflare Verification Page**
+
+If you see a Cloudflare "Verifying you are human" page:
+1. Try running in non-headless mode: `--headless=false`
+2. The stealth mode should handle this automatically
+3. Check the screenshot to confirm what page is being loaded
+4. See the "Anti-Detection & Cloudflare Bypass" section above
 
 **No videos found (videos=0, thumbnails=0)**
 

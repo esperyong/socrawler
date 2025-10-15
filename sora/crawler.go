@@ -112,8 +112,8 @@ func (c *CrawlerAction) StartCrawl(ctx context.Context, req *CrawlRequest) (*Cra
 
 	go router.Run()
 
-	// 导航到 Sora 页面
-	logrus.Info("Navigating to Sora page...")
+	// 导航到 Sora 页面（stealth 脚本已在页面创建时自动注入）
+	logrus.Info("Navigating to Sora page with stealth mode enabled...")
 	if err := page.Navigate(SoraURL); err != nil {
 		return nil, errors.Wrap(err, "failed to navigate to Sora page")
 	}
