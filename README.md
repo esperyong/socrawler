@@ -113,6 +113,45 @@ Crawls Sora videos and thumbnails from sora.chatgpt.com.
 
 Health check endpoint.
 
+## Debugging & Troubleshooting
+
+### Enhanced Logging
+
+The crawler now includes detailed logging to help diagnose issues:
+
+1. **Network Request Statistics**: Tracks total requests, OpenAI-related requests, and media requests
+2. **Page Information**: Logs page title, URL, and HTML length
+3. **Login Detection**: Warns if the page appears to require authentication
+4. **Screenshot Capture**: Saves initial page screenshot to `{save_path}/debug_initial_page.png`
+5. **Real-time Status**: Reports current video/thumbnail count and network statistics during crawling
+
+### Example Debug Output
+
+```
+time="..." level=info msg="Page title: Sora, URL: https://sora.chatgpt.com/"
+time="..." level=info msg="Saved initial page screenshot to: ./downloads/sora/debug_initial_page.png"
+time="..." level=debug msg="Page HTML length: 45678 bytes"
+time="..." level=debug msg="Detected media-related URL: https://videos.openai.com/..."
+time="..." level=info msg="Found video: https://videos.openai.com/video.mp4"
+time="..." level=info msg="Current status: videos=5, thumbnails=5, total_requests=234, openai_requests=45, media_requests=10"
+```
+
+### Common Issues
+
+**No videos found (videos=0, thumbnails=0)**
+
+Possible causes:
+1. **Authentication Required**: Sora may require login. Check the logs for "Page may require login" warning
+2. **Changed URL Structure**: The video URLs may have changed. Check debug logs for "Detected media-related URL" entries
+3. **Network Issues**: Check if `openai_requests` and `media_requests` are > 0
+4. **Insufficient Wait Time**: Try increasing `scroll_interval_seconds` or `total_duration_seconds`
+
+**Debugging Steps:**
+1. Enable debug logging: `go run . runserver --debug`
+2. Check the screenshot: `{save_path}/debug_initial_page.png`
+3. Review network statistics in the logs
+4. Look for "Detected media-related URL" entries to see what URLs are being captured
+
 ## Project Structure
 
 ```
@@ -303,3 +342,37 @@ This project is provided as-is for educational and development purposes.
 ---
 
 Built with ❤️ using Go, go-rod, and browser automation.
+
+
+# 查看帮助
+./run_service.sh help
+
+# 启动服务
+./run_service.sh start
+
+# 使用自定义端口启动
+./run_service.sh start --port=9090
+
+# 非 headless 模式启动（用于调试）
+./run_service.sh start --headless=false
+
+# 查看服务状态
+./run_service.sh status
+
+# 运行测试（自动启动服务并发送测试请求）
+./run_service.sh test
+
+# 运行更长的测试（5分钟，每15秒滚动）
+./run_service.sh test --duration=300 --interval=15
+
+# 查看实时日志
+./run_service.sh logs
+
+# 停止服务
+./run_service.sh stop
+
+# 重启服务
+./run_service.sh restart
+
+# 清理所有内容
+./run_service.sh cleanup
