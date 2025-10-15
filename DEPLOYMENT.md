@@ -17,10 +17,12 @@ This guide covers deploying socrawler on Ubuntu servers with headless Chrome sup
 
 ### System Requirements
 
-- **OS**: Ubuntu 20.04 LTS or later (recommended: Ubuntu 22.04 LTS)
+- **OS**: Ubuntu 20.04 LTS or later (recommended: Ubuntu 24.04 LTS)
 - **RAM**: Minimum 2GB, recommended 4GB+
 - **CPU**: 2+ cores recommended
 - **Disk**: At least 2GB free space for Chrome + storage for videos
+
+**Note for Ubuntu 24.04 users:** Package names have changed (see [UBUNTU_24.04_NOTES.md](UBUNTU_24.04_NOTES.md)). Our scripts handle this automatically.
 
 ### Software Requirements
 
@@ -59,13 +61,40 @@ chmod +x setup_browser_ubuntu.sh
 
 **Manual Installation (alternative):**
 
-If you prefer manual installation:
+If you prefer manual installation, see [UBUNTU_24.04_NOTES.md](UBUNTU_24.04_NOTES.md) for version-specific instructions.
 
+**For Ubuntu 24.04:**
 ```bash
 # Update packages
 sudo apt-get update
 
-# Install dependencies
+# Install dependencies (note: t64 suffix for Ubuntu 24.04)
+sudo apt-get install -y \
+    wget gnupg ca-certificates \
+    fonts-liberation libappindicator3-1 \
+    libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 \
+    libcups2t64 libdbus-1-3 libgdk-pixbuf2.0-0 \
+    libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
+    libxdamage1 libxrandr2 xdg-utils libgbm1 \
+    libxkbcommon0 libpango-1.0-0 libcairo2
+
+# Add Google Chrome repository (new method)
+wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | \
+    sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | \
+    sudo tee /etc/apt/sources.list.d/google-chrome.list
+
+# Install Chrome
+sudo apt-get update
+sudo apt-get install -y google-chrome-stable
+
+# Verify installation
+google-chrome --version
+```
+
+**For Ubuntu 22.04 and earlier:**
+```bash
+# Use package names without t64 suffix
 sudo apt-get install -y \
     wget gnupg ca-certificates \
     fonts-liberation libappindicator3-1 \
@@ -75,16 +104,14 @@ sudo apt-get install -y \
     libxdamage1 libxrandr2 xdg-utils libgbm1 \
     libxkbcommon0 libpango-1.0-0 libcairo2
 
-# Add Google Chrome repository
+# Add Chrome repository
 wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | \
+    sudo tee /etc/apt/sources.list.d/google-chrome.list
 
 # Install Chrome
 sudo apt-get update
 sudo apt-get install -y google-chrome-stable
-
-# Verify installation
-google-chrome --version
 ```
 
 ### Step 2: Install Go (if not installed)
