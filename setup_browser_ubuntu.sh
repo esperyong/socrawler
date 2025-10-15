@@ -17,10 +17,10 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Check if running as root
-if [ "$EUID" -eq 0 ]; then 
-    echo -e "${RED}Please do not run this script as root. Use sudo when prompted.${NC}"
-    exit 1
-fi
+#if [ "$EUID" -eq 0 ]; then
+#    echo -e "${RED}Please do not run this script as root. Use sudo when prompted.${NC}"
+#    exit 1
+#fi
 
 echo -e "${YELLOW}Step 1: Updating package list...${NC}"
 sudo apt-get update
