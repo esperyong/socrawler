@@ -36,7 +36,7 @@ func NewCleanBrowser(headless bool) *StealthBrowser {
 		// 禁用 GPU 加速（某些环境下有帮助）
 		Set("disable-gpu", "").
 		// 不使用沙箱（某些环境需要）
-		// NoSandbox(true).
+		NoSandbox(true).
 		// 禁用扩展
 		Set("disable-extensions", "")
 
