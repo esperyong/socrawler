@@ -36,27 +36,36 @@ func NewFeedDownloader(dbPath string, savePath string) (*FeedDownloader, error) 
 
 // Download executes the feed download process
 func (fd *FeedDownloader) Download(ctx context.Context, req *FeedDownloadRequest) (*FeedDownloadResult, error) {
+	return fd.DownloadWithFeed(ctx, req, nil)
+}
+
+// DownloadWithFeed executes the feed download process with optional pre-loaded feed
+func (fd *FeedDownloader) DownloadWithFeed(ctx context.Context, req *FeedDownloadRequest, feed *FeedResponse) (*FeedDownloadResult, error) {
 	startTime := time.Now()
 	logrus.Infof("Starting feed download: save_path=%s, db_path=%s, limit=%d, headless=%v",
 		req.SavePath, req.DBPath, req.Limit, req.Headless)
 
-	// Create browser instance
-	b := browser.NewCleanBrowser(req.Headless)
-	defer b.Close()
+	// Fetch feed if not provided
+	if feed == nil {
+		// Create browser instance
+		b := browser.NewCleanBrowser(req.Headless)
+		defer b.Close()
 
-	page := b.NewPage()
-	defer page.Close()
+		page := b.NewPage()
+		defer page.Close()
 
-	// Fetch feed
-	fetcher := NewFeedFetcher(page)
-	feed, err := fetcher.FetchFeed(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch feed")
-	}
+		// Fetch feed
+		fetcher := NewFeedFetcher(page)
+		var err error
+		feed, err = fetcher.FetchFeed(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to fetch feed")
+		}
 
-	// Validate feed
-	if err := ValidateFeedResponse(feed); err != nil {
-		return nil, errors.Wrap(err, "feed validation failed")
+		// Validate feed
+		if err := ValidateFeedResponse(feed); err != nil {
+			return nil, errors.Wrap(err, "feed validation failed")
+		}
 	}
 
 	logrus.Infof("Fetched %d items from feed", len(feed.Items))
@@ -173,8 +182,8 @@ func (fd *FeedDownloader) downloadVideos(items []FeedItem) *FeedDownloadResult {
 			continue
 		}
 
-		// Download video
-		videoPath, err := fd.mediaDownloader.DownloadMedia(videoAttachment.DownloadableURL, MediaTypeVideo)
+		// Download video using post_id as folder name
+		videoPath, err := fd.mediaDownloader.DownloadMediaForFeed(videoAttachment.DownloadableURL, item.Post.ID, MediaTypeVideo)
 		if err != nil {
 			logrus.Errorf("Failed to download video for post %s: %v", item.Post.ID, err)
 			result.Failed++
@@ -183,10 +192,10 @@ func (fd *FeedDownloader) downloadVideos(items []FeedItem) *FeedDownloadResult {
 
 		result.VideoPaths = append(result.VideoPaths, videoPath)
 
-		// Download thumbnail
+		// Download thumbnail using post_id as folder name
 		thumbnailPath := ""
 		if videoAttachment.Encodings.Thumbnail.Path != "" {
-			thumbnailPath, err = fd.mediaDownloader.DownloadMedia(videoAttachment.Encodings.Thumbnail.Path, MediaTypeThumbnail)
+			thumbnailPath, err = fd.mediaDownloader.DownloadMediaForFeed(videoAttachment.Encodings.Thumbnail.Path, item.Post.ID, MediaTypeThumbnail)
 			if err != nil {
 				logrus.Warnf("Failed to download thumbnail for post %s: %v", item.Post.ID, err)
 				// Don't fail the entire download if thumbnail fails
@@ -254,6 +263,79 @@ func DownloadFromFeed(ctx context.Context, req *FeedDownloadRequest) (*FeedDownl
 
 	// Execute download
 	result, err := downloader.Download(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "download failed")
+	}
+
+	return result, nil
+}
+
+// FetchFeedToFile fetches the feed and saves it to a file
+func FetchFeedToFile(ctx context.Context, outputPath string, headless bool) error {
+	logrus.Infof("Fetching feed to file: %s", outputPath)
+
+	// Create browser instance
+	b := browser.NewCleanBrowser(headless)
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	// Fetch feed
+	fetcher := NewFeedFetcher(page)
+	feed, err := fetcher.FetchFeed(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to fetch feed")
+	}
+
+	// Validate feed
+	if err := ValidateFeedResponse(feed); err != nil {
+		return errors.Wrap(err, "feed validation failed")
+	}
+
+	logrus.Infof("Fetched %d items from feed", len(feed.Items))
+
+	// Save to file
+	if err := SaveFeedToFile(feed, outputPath); err != nil {
+		return errors.Wrap(err, "failed to save feed to file")
+	}
+
+	logrus.Infof("Feed saved to: %s", outputPath)
+	return nil
+}
+
+// DownloadFromFile downloads videos from a saved feed file
+func DownloadFromFile(ctx context.Context, feedPath string, req *FeedDownloadRequest) (*FeedDownloadResult, error) {
+	logrus.Infof("Loading feed from file: %s", feedPath)
+
+	// Load feed from file
+	feed, err := LoadFeedFromFile(feedPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load feed from file")
+	}
+
+	logrus.Infof("Loaded %d items from feed file", len(feed.Items))
+
+	// Set defaults
+	if req.SavePath == "" {
+		req.SavePath = "./downloads/sora"
+	}
+	if req.DBPath == "" {
+		req.DBPath = "./sora.db"
+	}
+	if req.Limit <= 0 {
+		req.Limit = 50
+	}
+
+	// Create downloader
+	downloader, err := NewFeedDownloader(req.DBPath, req.SavePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create feed downloader")
+	}
+	defer downloader.Close()
+
+	// Execute download with pre-loaded feed
+	result, err := downloader.DownloadWithFeed(ctx, req, feed)
 	if err != nil {
 		return nil, errors.Wrap(err, "download failed")
 	}

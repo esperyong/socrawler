@@ -117,3 +117,53 @@ type FeedDownloadResult struct {
 	ThumbnailPaths  []string `json:"thumbnail_paths"`
 	DurationSeconds int      `json:"duration_seconds"`
 }
+
+// ToFeedItem converts a VideoRecord to a FeedItem
+func (vr *VideoRecord) ToFeedItem() FeedItem {
+	return FeedItem{
+		Post: Post{
+			ID:        vr.PostID,
+			PostedAt:  vr.PostedAt,
+			Text:      vr.Text,
+			Permalink: "https://sora.chatgpt.com/p/" + vr.PostID,
+			Attachments: []Attachment{
+				{
+					ID:              vr.PostID + "-attachment-0",
+					Kind:            "sora",
+					GenerationID:    vr.GenerationID,
+					GenerationType:  "video_gen",
+					URL:             vr.VideoURL,
+					DownloadableURL: vr.VideoURL,
+					Width:           vr.Width,
+					Height:          vr.Height,
+					Encodings: Encodings{
+						Source: Encoding{
+							Path: vr.VideoURL,
+						},
+						SourceWM: Encoding{
+							Path: vr.VideoURL,
+						},
+						Thumbnail: Encoding{
+							Path: vr.ThumbnailURL,
+						},
+					},
+				},
+			},
+		},
+		Profile: Profile{
+			UserID:   vr.UserID,
+			Username: vr.Username,
+		},
+	}
+}
+
+// VideoRecordsToFeedResponse converts a slice of VideoRecords to a FeedResponse
+func VideoRecordsToFeedResponse(records []*VideoRecord) *FeedResponse {
+	items := make([]FeedItem, len(records))
+	for i, record := range records {
+		items[i] = record.ToFeedItem()
+	}
+	return &FeedResponse{
+		Items: items,
+	}
+}

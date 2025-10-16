@@ -351,9 +351,9 @@ cleanup() {
     print_success "Cleanup completed"
 }
 
-# Function to run feed downloader
-run_feed() {
-    print_info "Running feed downloader..."
+# Function to run feed sync (default feed command)
+run_feed_sync() {
+    print_info "Running feed sync (fetch + download)..."
     echo ""
     
     # Check binary
@@ -362,17 +362,17 @@ run_feed() {
     # Create save directory
     mkdir -p "$FEED_SAVE_PATH"
     
-    print_info "Feed parameters:"
+    print_info "Feed sync parameters:"
     echo "  Save path: $FEED_SAVE_PATH"
     echo "  Database: $FEED_DB_PATH"
     echo "  Limit: $FEED_LIMIT"
     echo "  Headless: $HEADLESS"
     echo ""
     
-    # Run the feed command
-    print_info "Command: $SERVICE_BIN feed --save-path=$FEED_SAVE_PATH --db-path=$FEED_DB_PATH --limit=$FEED_LIMIT --headless=$HEADLESS"
+    # Run the feed sync command
+    print_info "Command: $SERVICE_BIN feed sync --save-path=$FEED_SAVE_PATH --db-path=$FEED_DB_PATH --limit=$FEED_LIMIT --headless=$HEADLESS"
     
-    $SERVICE_BIN feed \
+    $SERVICE_BIN feed sync \
         --save-path="$FEED_SAVE_PATH" \
         --db-path="$FEED_DB_PATH" \
         --limit=$FEED_LIMIT \
@@ -381,13 +381,13 @@ run_feed() {
     local exit_code=$?
     
     if [ $exit_code -eq 0 ]; then
-        print_success "Feed download completed successfully!"
+        print_success "Feed sync completed successfully!"
         
         # Show downloaded files
         if [ -d "$FEED_SAVE_PATH" ]; then
             echo ""
-            print_info "Downloaded files:"
-            ls -lh "$FEED_SAVE_PATH" | tail -n 10
+            print_info "Downloaded files (latest 10):"
+            ls -lt "$FEED_SAVE_PATH" | head -n 11
         fi
         
         # Show database info
@@ -397,8 +397,154 @@ run_feed() {
             ls -lh "$FEED_DB_PATH"
         fi
     else
+        print_error "Feed sync failed with exit code: $exit_code"
+        return $exit_code
+    fi
+}
+
+# Function to run feed fetch (fetch only, save to file)
+run_feed_fetch() {
+    local output="${FEED_OUTPUT:-feed.json}"
+    
+    print_info "Fetching feed to file..."
+    echo ""
+    
+    # Check binary
+    check_binary
+    
+    print_info "Feed fetch parameters:"
+    echo "  Output file: $output"
+    echo "  Headless: $HEADLESS"
+    echo ""
+    
+    # Run the feed fetch command
+    print_info "Command: $SERVICE_BIN feed fetch --output=$output --headless=$HEADLESS"
+    
+    $SERVICE_BIN feed fetch \
+        --output="$output" \
+        --headless=$HEADLESS
+    
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "Feed fetched and saved to: $output"
+        
+        if [ -f "$output" ]; then
+            local size=$(ls -lh "$output" | awk '{print $5}')
+            print_info "File size: $size"
+        fi
+    else
+        print_error "Feed fetch failed with exit code: $exit_code"
+        return $exit_code
+    fi
+}
+
+# Function to run feed download (download from saved feed file)
+run_feed_download() {
+    local input="${FEED_INPUT:-feed.json}"
+    
+    print_info "Downloading videos from saved feed file..."
+    echo ""
+    
+    # Check binary
+    check_binary
+    
+    # Check if input file exists
+    if [ ! -f "$input" ]; then
+        print_error "Input feed file not found: $input"
+        return 1
+    fi
+    
+    # Create save directory
+    mkdir -p "$FEED_SAVE_PATH"
+    
+    print_info "Feed download parameters:"
+    echo "  Input file: $input"
+    echo "  Save path: $FEED_SAVE_PATH"
+    echo "  Database: $FEED_DB_PATH"
+    echo "  Limit: $FEED_LIMIT"
+    echo ""
+    
+    # Run the feed download command
+    print_info "Command: $SERVICE_BIN feed download --input=$input --save-path=$FEED_SAVE_PATH --db-path=$FEED_DB_PATH --limit=$FEED_LIMIT"
+    
+    $SERVICE_BIN feed download \
+        --input="$input" \
+        --save-path="$FEED_SAVE_PATH" \
+        --db-path="$FEED_DB_PATH" \
+        --limit=$FEED_LIMIT
+    
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "Feed download completed successfully!"
+        
+        # Show downloaded files
+        if [ -d "$FEED_SAVE_PATH" ]; then
+            echo ""
+            print_info "Downloaded files (latest 10):"
+            ls -lt "$FEED_SAVE_PATH" | head -n 11
+        fi
+    else
         print_error "Feed download failed with exit code: $exit_code"
         return $exit_code
+    fi
+}
+
+# Function to run feed export (export database to JSON)
+run_feed_export() {
+    local output="${FEED_OUTPUT:-}"
+    local limit="${FEED_EXPORT_LIMIT:-0}"
+    
+    print_info "Exporting videos from database..."
+    echo ""
+    
+    # Check binary
+    check_binary
+    
+    # Check if database exists
+    if [ ! -f "$FEED_DB_PATH" ]; then
+        print_error "Database file not found: $FEED_DB_PATH"
+        return 1
+    fi
+    
+    print_info "Feed export parameters:"
+    echo "  Database: $FEED_DB_PATH"
+    echo "  Output: ${output:-stdout}"
+    echo "  Limit: ${limit} (0 = all)"
+    echo ""
+    
+    # Build command
+    local cmd="$SERVICE_BIN feed export --db-path=$FEED_DB_PATH --limit=$limit"
+    
+    if [ -n "$output" ]; then
+        cmd="$cmd --output=$output"
+        print_info "Command: $cmd"
+        
+        $SERVICE_BIN feed export \
+            --db-path="$FEED_DB_PATH" \
+            --limit=$limit \
+            --output="$output"
+        
+        local exit_code=$?
+        
+        if [ $exit_code -eq 0 ]; then
+            print_success "Videos exported to: $output"
+            
+            if [ -f "$output" ]; then
+                local size=$(ls -lh "$output" | awk '{print $5}')
+                print_info "File size: $size"
+            fi
+        else
+            print_error "Feed export failed with exit code: $exit_code"
+            return $exit_code
+        fi
+    else
+        print_info "Command: $cmd (output to stdout)"
+        
+        $SERVICE_BIN feed export \
+            --db-path="$FEED_DB_PATH" \
+            --limit=$limit
     fi
 }
 
@@ -444,16 +590,19 @@ show_usage() {
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
-    build       Build the service binary
-    start       Start the service
-    stop        Stop the service
-    restart     Restart the service
-    status      Show service status
-    logs        View service logs (tail -f)
-    test        Start service and run a test crawl
-    feed        Run feed downloader to get new videos
-    cleanup     Stop service and remove log files
-    help        Show this help message
+    build           Build the service binary
+    start           Start the service
+    stop            Stop the service
+    restart         Restart the service
+    status          Show service status
+    logs            View service logs (tail -f)
+    test            Start service and run a test crawl
+    feed-sync       Fetch feed and download videos (default feed behavior)
+    feed-fetch      Fetch feed and save to file (no downloads)
+    feed-download   Download videos from saved feed file
+    feed-export     Export downloaded videos as JSON
+    cleanup         Stop service and remove log files
+    help            Show this help message
 
 Options:
     --headless=<true|false>     Run browser in headless mode (default: true)
@@ -464,6 +613,9 @@ Options:
     --limit=<number>            Feed download limit (default: 50)
     --db-path=<path>            Database path for feed (default: ./sora.db)
     --save-path=<path>          Save path for downloads (default: ./downloads/sora)
+    --input=<path>              Input feed file for feed-download (default: feed.json)
+    --output=<path>             Output file for feed-fetch/feed-export
+    --export-limit=<number>     Limit for feed-export (default: 0 = all)
 
 Examples:
     # Build the service binary
@@ -493,14 +645,24 @@ Examples:
     # Stop the service
     $0 stop
 
-    # Run feed downloader
-    $0 feed
+    # Feed commands:
+    
+    # Sync (fetch + download, recommended for regular use)
+    $0 feed-sync
+    $0 feed-sync --limit=100
 
-    # Run feed with custom limit
-    $0 feed --limit=100
+    # Fetch feed only (save for later inspection/debugging)
+    $0 feed-fetch --output=my_feed.json
 
-    # Run feed without headless mode (for debugging)
-    $0 feed --headless=false --limit=10
+    # Download from saved feed file (useful for testing)
+    $0 feed-download --input=my_feed.json --limit=10
+
+    # Export database videos as JSON
+    $0 feed-export --output=videos.json --export-limit=50
+    $0 feed-export --export-limit=100  # Output to stdout
+
+    # Run feed sync without headless mode (for debugging)
+    $0 feed-sync --headless=false --limit=10
 
     # Clean up everything
     $0 cleanup
@@ -538,6 +700,15 @@ while [ $# -gt 0 ]; do
         --save-path=*)
             FEED_SAVE_PATH="${1#*=}"
             ;;
+        --input=*)
+            FEED_INPUT="${1#*=}"
+            ;;
+        --output=*)
+            FEED_OUTPUT="${1#*=}"
+            ;;
+        --export-limit=*)
+            FEED_EXPORT_LIMIT="${1#*=}"
+            ;;
         *)
             print_error "Unknown option: $1"
             show_usage
@@ -574,8 +745,17 @@ case "$COMMAND" in
         fi
         test_service
         ;;
-    feed)
-        run_feed
+    feed|feed-sync)
+        run_feed_sync
+        ;;
+    feed-fetch)
+        run_feed_fetch
+        ;;
+    feed-download)
+        run_feed_download
+        ;;
+    feed-export)
+        run_feed_export
         ;;
     cleanup)
         cleanup

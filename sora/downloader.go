@@ -42,6 +42,18 @@ func NewMediaDownloader(savePath string) *MediaDownloader {
 func (d *MediaDownloader) DownloadMedia(mediaURL string, mediaType MediaType) (string, error) {
 	// 生成文件夹和文件路径（优先使用task ID）
 	folderName := d.generateFolderName(mediaURL)
+	return d.downloadMediaToFolder(mediaURL, folderName, mediaType)
+}
+
+// DownloadMediaForFeed 为feed下载媒体文件，使用指定的文件夹名（post_id）
+// 返回本地文件路径
+func (d *MediaDownloader) DownloadMediaForFeed(mediaURL string, folderName string, mediaType MediaType) (string, error) {
+	return d.downloadMediaToFolder(mediaURL, folderName, mediaType)
+}
+
+// downloadMediaToFolder 下载媒体文件到指定文件夹
+// 返回本地文件路径
+func (d *MediaDownloader) downloadMediaToFolder(mediaURL string, folderName string, mediaType MediaType) (string, error) {
 	folderPath := filepath.Join(d.savePath, folderName)
 
 	// 确保文件夹存在

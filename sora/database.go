@@ -2,6 +2,8 @@ package sora
 
 import (
 	"database/sql"
+	"encoding/json"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -248,6 +250,115 @@ func (vdb *VideoDatabase) GetRecentVideos(limit int) ([]*VideoRecord, error) {
 	}
 
 	return records, nil
+}
+
+// GetAllVideos returns all videos from the database
+func (vdb *VideoDatabase) GetAllVideos(limit int) ([]*VideoRecord, error) {
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if limit > 0 {
+		query = `
+		SELECT post_id, generation_id, video_url, thumbnail_url, text,
+			   username, user_id, posted_at, downloaded_at,
+			   local_video_path, local_thumbnail_path, width, height
+		FROM sora_videos
+		ORDER BY posted_at DESC
+		LIMIT ?
+		`
+		rows, err = vdb.db.Query(query, limit)
+	} else {
+		query = `
+		SELECT post_id, generation_id, video_url, thumbnail_url, text,
+			   username, user_id, posted_at, downloaded_at,
+			   local_video_path, local_thumbnail_path, width, height
+		FROM sora_videos
+		ORDER BY posted_at DESC
+		`
+		rows, err = vdb.db.Query(query)
+	}
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query videos")
+	}
+	defer rows.Close()
+
+	var records []*VideoRecord
+	for rows.Next() {
+		record := &VideoRecord{}
+		err := rows.Scan(
+			&record.PostID,
+			&record.GenerationID,
+			&record.VideoURL,
+			&record.ThumbnailURL,
+			&record.Text,
+			&record.Username,
+			&record.UserID,
+			&record.PostedAt,
+			&record.DownloadedAt,
+			&record.LocalVideoPath,
+			&record.LocalThumbnailPath,
+			&record.Width,
+			&record.Height,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to scan video record")
+		}
+		records = append(records, record)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating rows")
+	}
+
+	return records, nil
+}
+
+// ExportVideosAsJSON exports videos as JSON in FeedResponse format
+func (vdb *VideoDatabase) ExportVideosAsJSON(limit int, outputPath string) error {
+	// Get videos from database
+	records, err := vdb.GetAllVideos(limit)
+	if err != nil {
+		return errors.Wrap(err, "failed to get videos")
+	}
+
+	if len(records) == 0 {
+		logrus.Warn("No videos found in database")
+		return errors.New("no videos found in database")
+	}
+
+	// Convert to FeedResponse
+	feedResponse := VideoRecordsToFeedResponse(records)
+
+	// Marshal to JSON
+	var data []byte
+	if outputPath == "" || outputPath == "-" {
+		// Output to stdout without indentation for piping
+		data, err = json.Marshal(feedResponse)
+	} else {
+		// Output to file with indentation for readability
+		data, err = json.MarshalIndent(feedResponse, "", "    ")
+	}
+
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal JSON")
+	}
+
+	// Write output
+	if outputPath == "" || outputPath == "-" {
+		// Write to stdout
+		os.Stdout.Write(data)
+		os.Stdout.Write([]byte("\n"))
+	} else {
+		// Write to file
+		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+			return errors.Wrap(err, "failed to write output file")
+		}
+		logrus.Infof("Exported %d videos to: %s", len(records), outputPath)
+	}
+
+	return nil
 }
 
 // Close closes the database connection
