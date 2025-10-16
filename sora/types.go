@@ -31,3 +31,89 @@ type CrawlResult struct {
 	TotalThumbnails int      `json:"total_thumbnails"`
 	DurationSeconds int      `json:"duration_seconds"`
 }
+
+// Feed-based types for new feed downloader
+
+// FeedResponse represents the response from the feed endpoint
+type FeedResponse struct {
+	Items []FeedItem `json:"items"`
+}
+
+// FeedItem represents a single item in the feed
+type FeedItem struct {
+	Post    Post    `json:"post"`
+	Profile Profile `json:"profile"`
+}
+
+// Post represents a Sora post
+type Post struct {
+	ID          string       `json:"id"`
+	SharedBy    string       `json:"shared_by"`
+	PostedAt    float64      `json:"posted_at"`
+	Text        string       `json:"text"`
+	Attachments []Attachment `json:"attachments"`
+	Permalink   string       `json:"permalink"`
+	LikeCount   int          `json:"like_count"`
+	ViewCount   int          `json:"view_count"`
+}
+
+// Attachment represents a media attachment (video)
+type Attachment struct {
+	ID              string    `json:"id"`
+	Kind            string    `json:"kind"`
+	GenerationID    string    `json:"generation_id"`
+	GenerationType  string    `json:"generation_type"`
+	URL             string    `json:"url"`
+	DownloadableURL string    `json:"downloadable_url"`
+	Width           int       `json:"width"`
+	Height          int       `json:"height"`
+	Encodings       Encodings `json:"encodings"`
+}
+
+// Encodings represents different media encodings
+type Encodings struct {
+	Source    Encoding `json:"source"`
+	SourceWM  Encoding `json:"source_wm"`
+	Thumbnail Encoding `json:"thumbnail"`
+	MD        Encoding `json:"md"`
+	GIF       Encoding `json:"gif"`
+}
+
+// Encoding represents a single encoding path
+type Encoding struct {
+	Path string `json:"path"`
+}
+
+// Profile represents a user profile
+type Profile struct {
+	UserID            string `json:"user_id"`
+	Username          string `json:"username"`
+	DisplayName       string `json:"display_name"`
+	ProfilePictureURL string `json:"profile_picture_url"`
+	FollowerCount     int    `json:"follower_count"`
+	PostCount         int    `json:"post_count"`
+	Verified          bool   `json:"verified"`
+	Location          string `json:"location"`
+	Description       string `json:"description"`
+	Permalink         string `json:"permalink"`
+}
+
+// FeedDownloadRequest represents a request to download from feed
+type FeedDownloadRequest struct {
+	SavePath string `json:"save_path"`
+	DBPath   string `json:"db_path"`
+	Limit    int    `json:"limit"`
+	Headless bool   `json:"headless"`
+}
+
+// FeedDownloadResult represents the result of feed download
+type FeedDownloadResult struct {
+	TotalFetched    int      `json:"total_fetched"`
+	NewVideos       int      `json:"new_videos"`
+	Downloaded      int      `json:"downloaded"`
+	Skipped         int      `json:"skipped"`
+	Failed          int      `json:"failed"`
+	VideoPaths      []string `json:"video_paths"`
+	ThumbnailPaths  []string `json:"thumbnail_paths"`
+	DurationSeconds int      `json:"duration_seconds"`
+}
