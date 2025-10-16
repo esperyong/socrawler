@@ -30,6 +30,11 @@ TEST_DURATION=60
 TEST_INTERVAL=10
 TEST_SAVE_PATH="./downloads/sora"
 
+# Feed parameters
+FEED_SAVE_PATH="./downloads/sora"
+FEED_DB_PATH="./sora.db"
+FEED_LIMIT=50
+
 # Function to print colored messages
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -346,6 +351,57 @@ cleanup() {
     print_success "Cleanup completed"
 }
 
+# Function to run feed downloader
+run_feed() {
+    print_info "Running feed downloader..."
+    echo ""
+    
+    # Check binary
+    check_binary
+    
+    # Create save directory
+    mkdir -p "$FEED_SAVE_PATH"
+    
+    print_info "Feed parameters:"
+    echo "  Save path: $FEED_SAVE_PATH"
+    echo "  Database: $FEED_DB_PATH"
+    echo "  Limit: $FEED_LIMIT"
+    echo "  Headless: $HEADLESS"
+    echo ""
+    
+    # Run the feed command
+    print_info "Command: $SERVICE_BIN feed --save-path=$FEED_SAVE_PATH --db-path=$FEED_DB_PATH --limit=$FEED_LIMIT --headless=$HEADLESS"
+    
+    $SERVICE_BIN feed \
+        --save-path="$FEED_SAVE_PATH" \
+        --db-path="$FEED_DB_PATH" \
+        --limit=$FEED_LIMIT \
+        --headless=$HEADLESS
+    
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "Feed download completed successfully!"
+        
+        # Show downloaded files
+        if [ -d "$FEED_SAVE_PATH" ]; then
+            echo ""
+            print_info "Downloaded files:"
+            ls -lh "$FEED_SAVE_PATH" | tail -n 10
+        fi
+        
+        # Show database info
+        if [ -f "$FEED_DB_PATH" ]; then
+            echo ""
+            print_info "Database: $FEED_DB_PATH"
+            ls -lh "$FEED_DB_PATH"
+        fi
+    else
+        print_error "Feed download failed with exit code: $exit_code"
+        return $exit_code
+    fi
+}
+
 # Function to build the service
 build_service() {
     print_info "Building ${SERVICE_NAME} service..."
@@ -395,6 +451,7 @@ Commands:
     status      Show service status
     logs        View service logs (tail -f)
     test        Start service and run a test crawl
+    feed        Run feed downloader to get new videos
     cleanup     Stop service and remove log files
     help        Show this help message
 
@@ -404,6 +461,9 @@ Options:
     --port=<port>               Service port (default: 8080)
     --duration=<seconds>        Test crawl duration (default: 60)
     --interval=<seconds>        Test scroll interval (default: 10)
+    --limit=<number>            Feed download limit (default: 50)
+    --db-path=<path>            Database path for feed (default: ./sora.db)
+    --save-path=<path>          Save path for downloads (default: ./downloads/sora)
 
 Examples:
     # Build the service binary
@@ -433,6 +493,15 @@ Examples:
     # Stop the service
     $0 stop
 
+    # Run feed downloader
+    $0 feed
+
+    # Run feed with custom limit
+    $0 feed --limit=100
+
+    # Run feed without headless mode (for debugging)
+    $0 feed --headless=false --limit=10
+
     # Clean up everything
     $0 cleanup
 
@@ -459,6 +528,15 @@ while [ $# -gt 0 ]; do
             ;;
         --interval=*)
             TEST_INTERVAL="${1#*=}"
+            ;;
+        --limit=*)
+            FEED_LIMIT="${1#*=}"
+            ;;
+        --db-path=*)
+            FEED_DB_PATH="${1#*=}"
+            ;;
+        --save-path=*)
+            FEED_SAVE_PATH="${1#*=}"
             ;;
         *)
             print_error "Unknown option: $1"
@@ -495,6 +573,9 @@ case "$COMMAND" in
             start_service || exit 1
         fi
         test_service
+        ;;
+    feed)
+        run_feed
         ;;
     cleanup)
         cleanup
