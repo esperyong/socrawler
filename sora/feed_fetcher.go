@@ -3,6 +3,7 @@ package sora
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -144,4 +145,39 @@ func ValidateFeedResponse(feed *FeedResponse) error {
 
 	logrus.Debugf("Feed validation passed: %d/%d items checked are valid", validItems, len(feed.Items))
 	return nil
+}
+
+// SaveFeedToFile saves a feed response to a JSON file
+func SaveFeedToFile(feed *FeedResponse, filePath string) error {
+	// Marshal feed to JSON with indentation
+	data, err := json.MarshalIndent(feed, "", "    ")
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal feed to JSON")
+	}
+
+	// Write to file
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return errors.Wrap(err, "failed to write feed to file")
+	}
+
+	logrus.Infof("Feed saved to file: %s (%d bytes)", filePath, len(data))
+	return nil
+}
+
+// LoadFeedFromFile loads a feed response from a JSON file
+func LoadFeedFromFile(filePath string) (*FeedResponse, error) {
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read feed file")
+	}
+
+	// Unmarshal JSON
+	var feed FeedResponse
+	if err := json.Unmarshal(data, &feed); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal feed JSON")
+	}
+
+	logrus.Infof("Feed loaded from file: %s (%d items)", filePath, len(feed.Items))
+	return &feed, nil
 }
