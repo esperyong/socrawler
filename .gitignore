@@ -44,3 +44,5 @@ socrawler
 curl_response.log
 debug.log
 socrawler.pid
+
+sora.db
