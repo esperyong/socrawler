@@ -66,6 +66,15 @@ func (fd *FeedDownloader) DownloadWithFeed(ctx context.Context, req *FeedDownloa
 		if err := ValidateFeedResponse(feed); err != nil {
 			return nil, errors.Wrap(err, "feed validation failed")
 		}
+
+		// Save feed to file for backup/debugging (only when fetched, not when loaded from file)
+		feedBackupPath := "feed.json"
+		if err := SaveFeedToFile(feed, feedBackupPath); err != nil {
+			logrus.Warnf("Failed to save feed backup to %s: %v", feedBackupPath, err)
+			// Don't fail the entire operation if backup fails
+		} else {
+			logrus.Infof("Feed backup saved to: %s", feedBackupPath)
+		}
 	}
 
 	logrus.Infof("Fetched %d items from feed", len(feed.Items))
