@@ -3,6 +3,7 @@ package sora
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -31,6 +32,9 @@ type VideoRecord struct {
 	LocalThumbnailPath string
 	Width              int
 	Height             int
+	Uploaded           bool
+	OSSVideoURL        sql.NullString
+	GoldcastToken      sql.NullString
 }
 
 // NewVideoDatabase creates or opens a SQLite database
@@ -58,6 +62,7 @@ func NewVideoDatabase(dbPath string) (*VideoDatabase, error) {
 
 // createTables creates the necessary database tables
 func (vdb *VideoDatabase) createTables() error {
+	// Create table without uploaded column first (for backward compatibility)
 	schema := `
 	CREATE TABLE IF NOT EXISTS sora_videos (
 		post_id TEXT PRIMARY KEY,
@@ -84,6 +89,47 @@ func (vdb *VideoDatabase) createTables() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to execute schema")
 	}
+
+	// Add uploaded column to existing tables (migration)
+	// Check if column exists first
+	var uploadedColumnExists int
+	row := vdb.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('sora_videos') WHERE name='uploaded'")
+	if err := row.Scan(&uploadedColumnExists); err == nil && uploadedColumnExists == 0 {
+		migration := `ALTER TABLE sora_videos ADD COLUMN uploaded INTEGER DEFAULT 0;`
+		if _, err := vdb.db.Exec(migration); err != nil {
+			logrus.Warnf("Failed to add uploaded column (may already exist): %v", err)
+		} else {
+			logrus.Info("Added uploaded column to existing sora_videos table")
+		}
+	}
+
+	// Add oss_video_url column to existing tables (migration)
+	var ossColumnExists int
+	row2 := vdb.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('sora_videos') WHERE name='oss_video_url'")
+	if err := row2.Scan(&ossColumnExists); err == nil && ossColumnExists == 0 {
+		migration := `ALTER TABLE sora_videos ADD COLUMN oss_video_url TEXT;`
+		if _, err := vdb.db.Exec(migration); err != nil {
+			logrus.Warnf("Failed to add oss_video_url column (may already exist): %v", err)
+		} else {
+			logrus.Info("Added oss_video_url column to existing sora_videos table")
+		}
+	}
+
+	// Add goldcast_token column to existing tables (migration)
+	var goldcastTokenExists int
+	row3 := vdb.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('sora_videos') WHERE name='goldcast_token'")
+	if err := row3.Scan(&goldcastTokenExists); err == nil && goldcastTokenExists == 0 {
+		migration := `ALTER TABLE sora_videos ADD COLUMN goldcast_token TEXT;`
+		if _, err := vdb.db.Exec(migration); err != nil {
+			logrus.Warnf("Failed to add goldcast_token column (may already exist): %v", err)
+		} else {
+			logrus.Info("Added goldcast_token column to existing sora_videos table")
+		}
+	}
+
+	// Create index for uploaded column if it exists
+	indexSchema := `CREATE INDEX IF NOT EXISTS idx_uploaded ON sora_videos(uploaded);`
+	vdb.db.Exec(indexSchema) // Ignore errors if column doesn't exist
 
 	return nil
 }
@@ -128,8 +174,8 @@ func (vdb *VideoDatabase) InsertVideo(record *VideoRecord) error {
 	INSERT INTO sora_videos (
 		post_id, generation_id, video_url, thumbnail_url, text,
 		username, user_id, posted_at, downloaded_at,
-		local_video_path, local_thumbnail_path, width, height
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		local_video_path, local_thumbnail_path, width, height, uploaded, oss_video_url, goldcast_token
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := vdb.db.Exec(query,
@@ -146,6 +192,9 @@ func (vdb *VideoDatabase) InsertVideo(record *VideoRecord) error {
 		record.LocalThumbnailPath,
 		record.Width,
 		record.Height,
+		record.Uploaded,
+		record.OSSVideoURL,
+		record.GoldcastToken,
 	)
 
 	if err != nil {
@@ -156,18 +205,12 @@ func (vdb *VideoDatabase) InsertVideo(record *VideoRecord) error {
 	return nil
 }
 
-// GetVideoByPostID retrieves a video record by post ID
-func (vdb *VideoDatabase) GetVideoByPostID(postID string) (*VideoRecord, error) {
-	query := `
-	SELECT post_id, generation_id, video_url, thumbnail_url, text,
-		   username, user_id, posted_at, downloaded_at,
-		   local_video_path, local_thumbnail_path, width, height
-	FROM sora_videos
-	WHERE post_id = ?
-	`
-
+// scanVideoRecord scans a row into a VideoRecord
+func scanVideoRecord(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*VideoRecord, error) {
 	record := &VideoRecord{}
-	err := vdb.db.QueryRow(query, postID).Scan(
+	err := scanner.Scan(
 		&record.PostID,
 		&record.GenerationID,
 		&record.VideoURL,
@@ -181,12 +224,28 @@ func (vdb *VideoDatabase) GetVideoByPostID(postID string) (*VideoRecord, error) 
 		&record.LocalThumbnailPath,
 		&record.Width,
 		&record.Height,
+		&record.Uploaded,
+		&record.OSSVideoURL,
+		&record.GoldcastToken,
 	)
+	return record, err
+}
 
+// selectVideoFields returns the field list for SELECT queries
+func selectVideoFields() string {
+	return `post_id, generation_id, video_url, thumbnail_url, text,
+		   username, user_id, posted_at, downloaded_at,
+		   local_video_path, local_thumbnail_path, width, height, uploaded, oss_video_url, goldcast_token`
+}
+
+// GetVideoByPostID retrieves a video record by post ID
+func (vdb *VideoDatabase) GetVideoByPostID(postID string) (*VideoRecord, error) {
+	query := fmt.Sprintf(`SELECT %s FROM sora_videos WHERE post_id = ?`, selectVideoFields())
+
+	record, err := scanVideoRecord(vdb.db.QueryRow(query, postID))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get video record")
 	}
@@ -206,14 +265,7 @@ func (vdb *VideoDatabase) GetVideoCount() (int, error) {
 
 // GetRecentVideos returns the most recent N videos
 func (vdb *VideoDatabase) GetRecentVideos(limit int) ([]*VideoRecord, error) {
-	query := `
-	SELECT post_id, generation_id, video_url, thumbnail_url, text,
-		   username, user_id, posted_at, downloaded_at,
-		   local_video_path, local_thumbnail_path, width, height
-	FROM sora_videos
-	ORDER BY posted_at DESC
-	LIMIT ?
-	`
+	query := fmt.Sprintf(`SELECT %s FROM sora_videos ORDER BY posted_at DESC LIMIT ?`, selectVideoFields())
 
 	rows, err := vdb.db.Query(query, limit)
 	if err != nil {
@@ -223,22 +275,7 @@ func (vdb *VideoDatabase) GetRecentVideos(limit int) ([]*VideoRecord, error) {
 
 	var records []*VideoRecord
 	for rows.Next() {
-		record := &VideoRecord{}
-		err := rows.Scan(
-			&record.PostID,
-			&record.GenerationID,
-			&record.VideoURL,
-			&record.ThumbnailURL,
-			&record.Text,
-			&record.Username,
-			&record.UserID,
-			&record.PostedAt,
-			&record.DownloadedAt,
-			&record.LocalVideoPath,
-			&record.LocalThumbnailPath,
-			&record.Width,
-			&record.Height,
-		)
+		record, err := scanVideoRecord(rows)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan video record")
 		}
@@ -258,24 +295,12 @@ func (vdb *VideoDatabase) GetAllVideos(limit int) ([]*VideoRecord, error) {
 	var rows *sql.Rows
 	var err error
 
+	fields := selectVideoFields()
 	if limit > 0 {
-		query = `
-		SELECT post_id, generation_id, video_url, thumbnail_url, text,
-			   username, user_id, posted_at, downloaded_at,
-			   local_video_path, local_thumbnail_path, width, height
-		FROM sora_videos
-		ORDER BY posted_at DESC
-		LIMIT ?
-		`
+		query = fmt.Sprintf(`SELECT %s FROM sora_videos ORDER BY posted_at DESC LIMIT ?`, fields)
 		rows, err = vdb.db.Query(query, limit)
 	} else {
-		query = `
-		SELECT post_id, generation_id, video_url, thumbnail_url, text,
-			   username, user_id, posted_at, downloaded_at,
-			   local_video_path, local_thumbnail_path, width, height
-		FROM sora_videos
-		ORDER BY posted_at DESC
-		`
+		query = fmt.Sprintf(`SELECT %s FROM sora_videos ORDER BY posted_at DESC`, fields)
 		rows, err = vdb.db.Query(query)
 	}
 
@@ -286,22 +311,7 @@ func (vdb *VideoDatabase) GetAllVideos(limit int) ([]*VideoRecord, error) {
 
 	var records []*VideoRecord
 	for rows.Next() {
-		record := &VideoRecord{}
-		err := rows.Scan(
-			&record.PostID,
-			&record.GenerationID,
-			&record.VideoURL,
-			&record.ThumbnailURL,
-			&record.Text,
-			&record.Username,
-			&record.UserID,
-			&record.PostedAt,
-			&record.DownloadedAt,
-			&record.LocalVideoPath,
-			&record.LocalThumbnailPath,
-			&record.Width,
-			&record.Height,
-		)
+		record, err := scanVideoRecord(rows)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan video record")
 		}
@@ -358,6 +368,125 @@ func (vdb *VideoDatabase) ExportVideosAsJSON(limit int, outputPath string) error
 		logrus.Infof("Exported %d videos to: %s", len(records), outputPath)
 	}
 
+	return nil
+}
+
+// GetUnuploadedVideos returns videos that haven't been uploaded to Goldcast
+func (vdb *VideoDatabase) GetUnuploadedVideos(limit int) ([]*VideoRecord, error) {
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	fields := selectVideoFields()
+	if limit > 0 {
+		query = fmt.Sprintf(`SELECT %s FROM sora_videos WHERE uploaded = 0 ORDER BY posted_at DESC LIMIT ?`, fields)
+		rows, err = vdb.db.Query(query, limit)
+	} else {
+		query = fmt.Sprintf(`SELECT %s FROM sora_videos WHERE uploaded = 0 ORDER BY posted_at DESC`, fields)
+		rows, err = vdb.db.Query(query)
+	}
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query unuploaded videos")
+	}
+	defer rows.Close()
+
+	var records []*VideoRecord
+	for rows.Next() {
+		record, err := scanVideoRecord(rows)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to scan video record")
+		}
+		records = append(records, record)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating rows")
+	}
+
+	return records, nil
+}
+
+// MarkVideoAsUploaded marks a video as uploaded to Goldcast
+func (vdb *VideoDatabase) MarkVideoAsUploaded(postID string) error {
+	query := `UPDATE sora_videos SET uploaded = 1 WHERE post_id = ?`
+
+	result, err := vdb.db.Exec(query, postID)
+	if err != nil {
+		return errors.Wrap(err, "failed to mark video as uploaded")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return errors.Errorf("no video found with post_id: %s", postID)
+	}
+
+	logrus.Debugf("Marked video as uploaded: post_id=%s", postID)
+	return nil
+}
+
+// GetUploadStats returns statistics about uploaded vs unuploaded videos
+func (vdb *VideoDatabase) GetUploadStats() (uploaded int, unuploaded int, err error) {
+	// Get uploaded count
+	err = vdb.db.QueryRow("SELECT COUNT(*) FROM sora_videos WHERE uploaded = 1").Scan(&uploaded)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to count uploaded videos")
+	}
+
+	// Get unuploaded count
+	err = vdb.db.QueryRow("SELECT COUNT(*) FROM sora_videos WHERE uploaded = 0").Scan(&unuploaded)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to count unuploaded videos")
+	}
+
+	return uploaded, unuploaded, nil
+}
+
+// UpdateOSSVideoURL updates the OSS video URL for a video
+func (vdb *VideoDatabase) UpdateOSSVideoURL(postID, ossURL string) error {
+	query := `UPDATE sora_videos SET oss_video_url = ? WHERE post_id = ?`
+
+	result, err := vdb.db.Exec(query, ossURL, postID)
+	if err != nil {
+		return errors.Wrap(err, "failed to update OSS video URL")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return errors.Errorf("no video found with post_id: %s", postID)
+	}
+
+	logrus.Debugf("Updated OSS video URL: post_id=%s, url=%s", postID, ossURL)
+	return nil
+}
+
+// UpdateGoldcastToken updates the Goldcast token for a video
+func (vdb *VideoDatabase) UpdateGoldcastToken(postID, token string) error {
+	query := `UPDATE sora_videos SET goldcast_token = ? WHERE post_id = ?`
+
+	result, err := vdb.db.Exec(query, token, postID)
+	if err != nil {
+		return errors.Wrap(err, "failed to update Goldcast token")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return errors.Errorf("no video found with post_id: %s", postID)
+	}
+
+	logrus.Debugf("Updated Goldcast token: post_id=%s, token=%s", postID, token)
 	return nil
 }
 

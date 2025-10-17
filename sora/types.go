@@ -118,6 +118,16 @@ type FeedDownloadResult struct {
 	DurationSeconds int      `json:"duration_seconds"`
 }
 
+// GoldcastUploadResult represents the result of Goldcast upload operation
+type GoldcastUploadResult struct {
+	TotalUnuploaded int      `json:"total_unuploaded"`
+	Attempted       int      `json:"attempted"`
+	Succeeded       int      `json:"succeeded"`
+	Failed          int      `json:"failed"`
+	FailedPostIDs   []string `json:"failed_post_ids"`
+	DurationSeconds int      `json:"duration_seconds"`
+}
+
 // ToFeedItem converts a VideoRecord to a FeedItem
 func (vr *VideoRecord) ToFeedItem() FeedItem {
 	return FeedItem{

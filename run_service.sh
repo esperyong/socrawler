@@ -35,6 +35,18 @@ FEED_SAVE_PATH="./downloads/sora"
 FEED_DB_PATH="./sora.db"
 FEED_LIMIT=50
 
+# Goldcast upload parameters
+GOLDCAST_API_KEY="${GOLDCAST_API_KEY:-ucHZBRJ1.w8njpEorJlDgjp0ESnw0qSyOkN6V6VUe}"
+GOLDCAST_API_URL="${GOLDCAST_API_URL:-https://financial.xiaoyequ9.com/api/v1/external/media/upload}"
+GOLDCAST_LIMIT=0
+
+# OSS parameters (required for Goldcast upload)
+OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:-}"
+OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:-}"
+OSS_BUCKET_NAME="${OSS_BUCKET_NAME:-dreammedias}"
+OSS_ENDPOINT="${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}"
+OSS_REGION="${OSS_REGION:-cn-beijing}"
+
 # Function to print colored messages
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -548,6 +560,83 @@ run_feed_export() {
     fi
 }
 
+# Function to run Goldcast upload
+run_goldcast_upload() {
+    print_info "Uploading videos to Goldcast..."
+    echo ""
+    
+    # Check binary
+    check_binary
+    
+    # Check if database exists
+    if [ ! -f "$FEED_DB_PATH" ]; then
+        print_error "Database file not found: $FEED_DB_PATH"
+        print_info "Please run feed-sync first to download videos"
+        return 1
+    fi
+    
+    # Check OSS credentials (required)
+    if [ -z "$OSS_ACCESS_KEY_ID" ] || [ -z "$OSS_ACCESS_KEY_SECRET" ]; then
+        print_error "OSS credentials are required!"
+        echo ""
+        print_info "Please provide OSS credentials via:"
+        echo "  1. Command-line: --oss-access-key-id=xxx --oss-access-key-secret=xxx"
+        echo "  2. Environment: export OSS_ACCESS_KEY_ID=xxx && export OSS_ACCESS_KEY_SECRET=xxx"
+        echo ""
+        print_info "Optional (have defaults):"
+        echo "  --oss-bucket-name=$OSS_BUCKET_NAME"
+        echo "  --oss-endpoint=$OSS_ENDPOINT"
+        echo "  --oss-region=$OSS_REGION"
+        return 1
+    fi
+    
+    print_info "Goldcast upload parameters:"
+    echo "  Database: $FEED_DB_PATH"
+    echo "  API URL: $GOLDCAST_API_URL"
+    echo "  Limit: $GOLDCAST_LIMIT (0 = all)"
+    echo "  OSS Bucket: $OSS_BUCKET_NAME"
+    echo "  OSS Endpoint: $OSS_ENDPOINT"
+    echo ""
+    
+    # Build command
+    local cmd="$SERVICE_BIN feed uploadgoldcast --db-path=$FEED_DB_PATH --limit=$GOLDCAST_LIMIT"
+    cmd="$cmd --oss-access-key-id=$OSS_ACCESS_KEY_ID --oss-access-key-secret=***"
+    cmd="$cmd --oss-bucket-name=$OSS_BUCKET_NAME --oss-endpoint=$OSS_ENDPOINT --oss-region=$OSS_REGION"
+    
+    # Add API key if provided
+    if [ -n "$GOLDCAST_API_KEY" ]; then
+        cmd="$cmd --api-key=$GOLDCAST_API_KEY"
+    fi
+    
+    # Add API URL if provided
+    if [ -n "$GOLDCAST_API_URL" ]; then
+        cmd="$cmd --api-url=$GOLDCAST_API_URL"
+    fi
+    
+    print_info "Command: $cmd"
+    
+    # Run the upload command
+    $SERVICE_BIN feed uploadgoldcast \
+        --db-path="$FEED_DB_PATH" \
+        --limit=$GOLDCAST_LIMIT \
+        --api-key="$GOLDCAST_API_KEY" \
+        --api-url="$GOLDCAST_API_URL" \
+        --oss-access-key-id="$OSS_ACCESS_KEY_ID" \
+        --oss-access-key-secret="$OSS_ACCESS_KEY_SECRET" \
+        --oss-bucket-name="$OSS_BUCKET_NAME" \
+        --oss-endpoint="$OSS_ENDPOINT" \
+        --oss-region="$OSS_REGION"
+    
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "Goldcast upload completed!"
+    else
+        print_error "Goldcast upload failed with exit code: $exit_code"
+        return $exit_code
+    fi
+}
+
 # Function to build the service
 build_service() {
     print_info "Building ${SERVICE_NAME} service..."
@@ -590,19 +679,20 @@ show_usage() {
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
-    build           Build the service binary
-    start           Start the service
-    stop            Stop the service
-    restart         Restart the service
-    status          Show service status
-    logs            View service logs (tail -f)
-    test            Start service and run a test crawl
-    feed-sync       Fetch feed and download videos (default feed behavior)
-    feed-fetch      Fetch feed and save to file (no downloads)
-    feed-download   Download videos from saved feed file
-    feed-export     Export downloaded videos as JSON
-    cleanup         Stop service and remove log files
-    help            Show this help message
+    build                Build the service binary
+    start                Start the service
+    stop                 Stop the service
+    restart              Restart the service
+    status               Show service status
+    logs                 View service logs (tail -f)
+    test                 Start service and run a test crawl
+    feed-sync            Fetch feed and download videos (default feed behavior)
+    feed-fetch           Fetch feed and save to file (no downloads)
+    feed-download        Download videos from saved feed file
+    feed-export          Export downloaded videos as JSON
+    feed-uploadgoldcast  Upload videos to Goldcast media CMS
+    cleanup              Stop service and remove log files
+    help                 Show this help message
 
 Options:
     --headless=<true|false>     Run browser in headless mode (default: true)
@@ -616,6 +706,14 @@ Options:
     --input=<path>              Input feed file for feed-download (default: feed.json)
     --output=<path>             Output file for feed-fetch/feed-export
     --export-limit=<number>     Limit for feed-export (default: 0 = all)
+    --api-key=<key>             Goldcast API key (env: GOLDCAST_API_KEY)
+    --api-url=<url>             Goldcast API URL (env: GOLDCAST_API_URL)
+    --upload-limit=<number>     Upload limit for Goldcast (default: 0 = all)
+    --oss-access-key-id=<key>   OSS Access Key ID (env: OSS_ACCESS_KEY_ID, required)
+    --oss-access-key-secret=<s> OSS Access Key Secret (env: OSS_ACCESS_KEY_SECRET, required)
+    --oss-bucket-name=<name>    OSS Bucket Name (env: OSS_BUCKET_NAME, default: dreammedias)
+    --oss-endpoint=<endpoint>   OSS Endpoint (env: OSS_ENDPOINT, default: oss-cn-beijing.aliyuncs.com)
+    --oss-region=<region>       OSS Region (env: OSS_REGION, default: cn-beijing)
 
 Examples:
     # Build the service binary
@@ -660,6 +758,15 @@ Examples:
     # Export database videos as JSON
     $0 feed-export --output=videos.json --export-limit=50
     $0 feed-export --export-limit=100  # Output to stdout
+
+    # Upload videos to Goldcast (OSS credentials required)
+    $0 feed-uploadgoldcast --oss-access-key-id=YOUR_KEY_ID --oss-access-key-secret=YOUR_SECRET
+    $0 feed-uploadgoldcast --upload-limit=10 --oss-access-key-id=KEY --oss-access-key-secret=SECRET
+    
+    # Or use environment variables
+    export OSS_ACCESS_KEY_ID=YOUR_KEY_ID
+    export OSS_ACCESS_KEY_SECRET=YOUR_SECRET
+    $0 feed-uploadgoldcast
 
     # Run feed sync without headless mode (for debugging)
     $0 feed-sync --headless=false --limit=10
@@ -709,6 +816,30 @@ while [ $# -gt 0 ]; do
         --export-limit=*)
             FEED_EXPORT_LIMIT="${1#*=}"
             ;;
+        --api-key=*)
+            GOLDCAST_API_KEY="${1#*=}"
+            ;;
+        --api-url=*)
+            GOLDCAST_API_URL="${1#*=}"
+            ;;
+        --upload-limit=*)
+            GOLDCAST_LIMIT="${1#*=}"
+            ;;
+        --oss-access-key-id=*)
+            OSS_ACCESS_KEY_ID="${1#*=}"
+            ;;
+        --oss-access-key-secret=*)
+            OSS_ACCESS_KEY_SECRET="${1#*=}"
+            ;;
+        --oss-bucket-name=*)
+            OSS_BUCKET_NAME="${1#*=}"
+            ;;
+        --oss-endpoint=*)
+            OSS_ENDPOINT="${1#*=}"
+            ;;
+        --oss-region=*)
+            OSS_REGION="${1#*=}"
+            ;;
         *)
             print_error "Unknown option: $1"
             show_usage
@@ -756,6 +887,9 @@ case "$COMMAND" in
         ;;
     feed-export)
         run_feed_export
+        ;;
+    feed-uploadgoldcast)
+        run_goldcast_upload
         ;;
     cleanup)
         cleanup

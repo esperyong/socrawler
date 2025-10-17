@@ -347,12 +347,43 @@ case "my_custom_tool":
 
 ## Configuration
 
+### Server Configuration
+
 The server can be configured through command-line flags:
 
 - `--port, -p`: Server port (default: 8080)
 - `--debug, -d`: Enable debug logging
 - `--headless`: Run browser in headless mode (default: true)
 - `--help, -h`: Show help information
+
+### OSS Configuration (Required for Goldcast Upload)
+
+**⚠️ Important**: As of October 17, 2025, OSS credentials are required for the `feed uploadgoldcast` command.
+
+**Easiest way - via command-line flags:**
+
+```bash
+./socrawler feed uploadgoldcast \
+  --oss-access-key-id="your-aliyun-access-key-id" \
+  --oss-access-key-secret="your-aliyun-access-key-secret"
+```
+
+**Or via environment variables:**
+
+```bash
+# Only these two are required (others have defaults)
+export OSS_ACCESS_KEY_ID="your-aliyun-access-key-id"
+export OSS_ACCESS_KEY_SECRET="your-aliyun-access-key-secret"
+
+./socrawler feed uploadgoldcast
+```
+
+**Optional settings (have defaults):**
+- `OSS_BUCKET_NAME` (default: `dreammedias`)
+- `OSS_ENDPOINT` (default: `oss-cn-beijing.aliyuncs.com`)
+- `OSS_REGION` (default: `cn-beijing`)
+
+For detailed configuration instructions, see [OSS_CONFIG_CHANGE.md](./OSS_CONFIG_CHANGE.md).
 
 ## Usage Examples
 

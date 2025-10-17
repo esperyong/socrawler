@@ -76,7 +76,8 @@ CREATE TABLE sora_videos (
     local_video_path TEXT,              -- 本地视频路径
     local_thumbnail_path TEXT,          -- 本地缩略图路径
     width INTEGER,                      -- 视频宽度
-    height INTEGER                      -- 视频高度
+    height INTEGER,                     -- 视频高度
+    uploaded INTEGER DEFAULT 0          -- 是否已上传到 Goldcast (0=未上传, 1=已上传)
 );
 ```
 
@@ -93,6 +94,147 @@ downloads/sora/
 │   ├── video.mp4
 │   └── thumbnail.webp
 └── ...
+```
+
+## Goldcast 上传集成
+
+### 概述
+
+Feed 下载器支持将下载的视频自动上传到 Goldcast 媒体 CMS 系统。系统会跟踪哪些视频已经上传，避免重复上传。
+
+### 基本用法
+
+```bash
+# 上传所有未上传的视频
+./run_service.sh feed-uploadgoldcast
+
+# 限制上传数量（例如每次只上传 10 个）
+./run_service.sh feed-uploadgoldcast --upload-limit=10
+
+# 使用自定义 API 配置
+./run_service.sh feed-uploadgoldcast --api-key=YOUR_KEY --api-url=YOUR_URL
+```
+
+### 命令参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--api-key` | `ucHZBRJ1.w8njpEorJlDgjp0ESnw0qSyOkN6V6VUe` | Goldcast API 密钥 |
+| `--api-url` | `https://financial.xiaoyequ9.com/api/v1/external/media/upload` | Goldcast API 地址 |
+| `--db-path` | `./sora.db` | SQLite 数据库路径 |
+| `--upload-limit` | `0` | 单次上传数量限制 (0=全部) |
+| `--debug` | `false` | 启用调试日志 |
+
+### 环境变量支持
+
+**重要**: 从 2025年10月17日 起，OSS 配置为必填项，必须通过环境变量提供。
+
+#### 必需的 OSS 配置
+
+```bash
+# 阿里云 OSS 配置（必填）
+export OSS_ACCESS_KEY_ID="your-aliyun-access-key-id"
+export OSS_ACCESS_KEY_SECRET="your-aliyun-access-key-secret"
+export OSS_BUCKET_NAME="your-bucket-name"
+export OSS_ENDPOINT="oss-cn-beijing.aliyuncs.com"
+export OSS_REGION="cn-beijing"  # 可选，默认为 cn-beijing
+```
+
+#### 可选的 Goldcast API 配置
+
+```bash
+# Goldcast API 配置（可选）
+export GOLDCAST_API_KEY="your-api-key"
+export GOLDCAST_API_URL="https://your-goldcast-instance.com/api/v1/external/media/upload"
+```
+
+#### 完整示例
+
+```bash
+# 设置所有环境变量
+export OSS_ACCESS_KEY_ID="LTxxxxxxxxxx"
+export OSS_ACCESS_KEY_SECRET="xxxxxxxxxxxxxx"
+export OSS_BUCKET_NAME="your-bucket"
+export OSS_ENDPOINT="oss-cn-beijing.aliyuncs.com"
+export GOLDCAST_API_KEY="your-api-key"
+export GOLDCAST_API_URL="https://your-goldcast-instance.com/api/v1/external/media/upload"
+
+# 然后直接运行
+./run_service.sh feed-uploadgoldcast
+```
+
+**注意**: 如果未设置 OSS 环境变量，上传命令会失败并显示清晰的错误信息。
+
+### 典型工作流
+
+**1. 同步和上传（推荐）**
+
+```bash
+# 步骤 1: 下载最新的视频
+./run_service.sh feed-sync --limit=100
+
+# 步骤 2: 上传到 Goldcast
+./run_service.sh feed-uploadgoldcast
+```
+
+**2. 定时任务集成**
+
+```bash
+# 在 cron 中设置自动同步和上传
+# 每天凌晨 3 点下载，3:30 上传
+
+# /etc/crontab 或 crontab -e
+0 3 * * * cd /path/to/socrawler && ./run_service.sh feed-sync --limit=1000
+30 3 * * * cd /path/to/socrawler && ./run_service.sh feed-uploadgoldcast
+```
+
+**3. 直接使用命令行**
+
+```bash
+# 使用二进制直接调用
+./socrawler feed uploadgoldcast \
+  --db-path ./sora.db \
+  --limit 50 \
+  --debug
+```
+
+### 上传逻辑
+
+1. **自动去重**: 只上传 `uploaded = 0` 的视频
+2. **使用原始 URL**: 上传时使用 Sora 的原始视频 URL，由 Goldcast 下载
+3. **标题处理**: 自动将视频描述截断到 100 字符作为标题
+4. **失败重试**: 上传失败的视频保持 `uploaded = 0` 状态，下次运行时会重试
+5. **进度跟踪**: 成功上传后立即标记 `uploaded = 1`
+
+### 视频信息映射
+
+| Sora 字段 | Goldcast 字段 | 说明 |
+|-----------|---------------|------|
+| `video_url` | `media_url` | 视频下载地址 |
+| `text` (截断) | `title` | 标题（最多 100 字符） |
+| `text` (完整) | `description` | 描述 |
+| 固定值 | `user` | 上传用户信息 |
+
+### 幂等性
+
+上传命令是幂等的，可以安全地多次运行：
+
+```bash
+# 运行多次只会上传新的未上传视频
+./run_service.sh feed-uploadgoldcast
+./run_service.sh feed-uploadgoldcast  # 跳过已上传的
+./run_service.sh feed-uploadgoldcast  # 跳过已上传的
+```
+
+### 查看上传统计
+
+```bash
+# 查看数据库中的上传状态
+sqlite3 sora.db "SELECT 
+    COUNT(*) as total,
+    SUM(uploaded) as uploaded,
+    COUNT(*) - SUM(uploaded) as pending
+FROM sora_videos;"
 ```
 
 ## 定时任务设置
@@ -175,6 +317,11 @@ sqlite3 sora.db "SELECT COUNT(*) FROM sora_videos;"
 
 # 按作者统计
 sqlite3 sora.db "SELECT username, COUNT(*) as count FROM sora_videos GROUP BY username ORDER BY count DESC LIMIT 10;"
+```
+
+### 查看表结构
+```bash
+sqlite3 sora.db ".schema sora_videos"
 ```
 
 ## 测试
